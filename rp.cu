@@ -25,6 +25,7 @@
 
 #define tamanho_img 25
 #define amostras 200
+#define train_size 200
 
 #define FatalError(s) do {                                             \
     std::stringstream _where, _message;                                \
@@ -79,6 +80,21 @@ __global__ void SoftmaxLossBackprop(const float *label, int num_labels, int batc
 
     // For each item in the batch, decrease the result of the label's value by 1
     diff[idx * num_labels + label_value] -= 1.0f;
+}
+
+/**
+ * Fills a floating-point array with ones.
+ *
+ * @param vec The array to fill.
+ * @param size The number of elements in the array.
+ */
+__global__ void FillOnes(float *vec, int size)
+{
+    int idx = blockIdx.x * blockDim.x + threadIdx.x;
+    if (idx >= size)
+        return;
+
+    vec[idx] = 1.0f;
 }
 
 struct FullyConnectedLayer
@@ -145,10 +161,10 @@ struct TrainingContext
                                               CUDNN_DATA_FLOAT,
                                               batch_size, l3.outputs, 1, 1));
 
-        checkCUDNN(cudnnSetActivationDescriptor(l1Activation, CUDNN_ACTIVATION_RELU,
+        checkCUDNN(cudnnSetActivationDescriptor(l1Activation, CUDNN_ACTIVATION_SIGMOID,
                                                 CUDNN_PROPAGATE_NAN, 0.0));
 
-	checkCUDNN(cudnnSetActivationDescriptor(l2Activation, CUDNN_ACTIVATION_RELU,
+	checkCUDNN(cudnnSetActivationDescriptor(l2Activation, CUDNN_ACTIVATION_SIGMOID,
                                                 CUDNN_PROPAGATE_NAN, 0.0));
     }
 
@@ -253,7 +269,7 @@ struct TrainingContext
                          float *gfc1, float *gfc1bias, float *dfc1, float *dfc1relu,
                          float *gfc2, float *gfc2bias, float *dfc2, float *dfc2relu,
 			 float *gfc3, float *gfc3bias, float *dfc3,
-                         void *workspace, float *onevec)
+                         float *onevec)
     {    
         float alpha = 1.0f, beta = 0.0f;
 
@@ -601,10 +617,115 @@ int main() {
         for (auto&& iter : l3.pbias)
             iter = static_cast<float>(0.5);
 
-float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2smax;
+	TrainingContext context(0, 50, l1, l2, l3);
 
+float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3smax;
 
+	checkCudaErrors(cudaMalloc(&d_data,    sizeof(float) * context.m_batchSize * 25));
+	checkCudaErrors(cudaMalloc(&d_labels,  sizeof(float) * context.m_batchSize * 1                  * 1                                 * 1));
+	checkCudaErrors(cudaMalloc(&d_fc1,     sizeof(float) * context.m_batchSize * l1.outputs));    
+	checkCudaErrors(cudaMalloc(&d_fc1relu, sizeof(float) * context.m_batchSize * l1.outputs));
+	checkCudaErrors(cudaMalloc(&d_fc2,     sizeof(float) * context.m_batchSize * l2.outputs));
+	checkCudaErrors(cudaMalloc(&d_fc2relu, sizeof(float) * context.m_batchSize * l2.outputs));
+	checkCudaErrors(cudaMalloc(&d_fc3,     sizeof(float) * context.m_batchSize * l3.outputs));
+	checkCudaErrors(cudaMalloc(&d_fc3smax, sizeof(float) * context.m_batchSize * l3.outputs));   
 	
+    // Network parameters
+    float *d_pfc1, *d_pfc1bias, *d_pfc2, *d_pfc2bias, *d_pfc3, *d_pfc3bias;
 		
+    checkCudaErrors(cudaMalloc(&d_pfc1,       sizeof(float) * l1.pneurons.size()));
+    checkCudaErrors(cudaMalloc(&d_pfc1bias,   sizeof(float) * l1.pbias.size()));
+    checkCudaErrors(cudaMalloc(&d_pfc2,       sizeof(float) * l2.pneurons.size()));
+    checkCudaErrors(cudaMalloc(&d_pfc2bias,   sizeof(float) * l2.pbias.size())); 
+    checkCudaErrors(cudaMalloc(&d_pfc3,       sizeof(float) * l3.pneurons.size()));
+    checkCudaErrors(cudaMalloc(&d_pfc3bias,   sizeof(float) * l3.pbias.size()));  
+
+    // Network parameter gradients
+    float *d_gfc1, *d_gfc1bias, *d_gfc2, *d_gfc2bias, *d_gfc3, *d_gfc3bias;
+    
+    checkCudaErrors(cudaMalloc(&d_gfc1,       sizeof(float) * l1.pneurons.size()));
+    checkCudaErrors(cudaMalloc(&d_gfc1bias,   sizeof(float) * l1.pbias.size()));    
+    checkCudaErrors(cudaMalloc(&d_gfc2,       sizeof(float) * l2.pneurons.size()));
+    checkCudaErrors(cudaMalloc(&d_gfc2bias,   sizeof(float) * l2.pbias.size()));
+    checkCudaErrors(cudaMalloc(&d_gfc3,       sizeof(float) * l3.pneurons.size()));
+    checkCudaErrors(cudaMalloc(&d_gfc3bias,   sizeof(float) * l3.pbias.size()));
+    
+    // Differentials w.r.t. data
+    float *d_dfc1, *d_dfc1relu, *d_dfc2, *d_dfc2relu, *d_dfc3, *d_dfc3sfmax, *d_dlossdata;
+
+    checkCudaErrors(cudaMalloc(&d_dfc1,     sizeof(float) * context.m_batchSize * l1.inputs));
+    checkCudaErrors(cudaMalloc(&d_dfc1relu, sizeof(float) * context.m_batchSize * l1.outputs));
+    checkCudaErrors(cudaMalloc(&d_dfc2,     sizeof(float) * context.m_batchSize * l2.inputs));
+    checkCudaErrors(cudaMalloc(&d_dfc2relu, sizeof(float) * context.m_batchSize * l2.outputs));
+    checkCudaErrors(cudaMalloc(&d_dfc3,     sizeof(float) * context.m_batchSize * l3.inputs));
+    checkCudaErrors(cudaMalloc(&d_dfc3sfmax, sizeof(float) * context.m_batchSize * l3.outputs));
+    checkCudaErrors(cudaMalloc(&d_dlossdata,sizeof(float) * context.m_batchSize * l3.outputs));
+
+
+    float *d_onevec;   
+    checkCudaErrors(cudaMalloc(&d_onevec, sizeof(float)* context.m_batchSize));
+
+
+    // Copy initial network to device
+    checkCudaErrors(cudaMemcpyAsync(d_pfc1, &l1.pneurons[0],      sizeof(float) * l1.pneurons.size(), cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(d_pfc1bias, &l1.pbias[0],     sizeof(float) * l1.pbias.size(),    cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(d_pfc2, &l2.pneurons[0],      sizeof(float) * l2.pneurons.size(), cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(d_pfc2bias, &l2.pbias[0],     sizeof(float) * l2.pbias.size(),    cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(d_pfc3, &l3.pneurons[0],      sizeof(float) * l3.pneurons.size(), cudaMemcpyHostToDevice));
+    checkCudaErrors(cudaMemcpyAsync(d_pfc3bias, &l3.pbias[0],     sizeof(float) * l3.pbias.size(),    cudaMemcpyHostToDevice));
+    
+    // Fill one-vector with ones
+    FillOnes<<<RoundUp(context.m_batchSize, BW), BW>>>(d_onevec, context.m_batchSize);
+
+
+ checkCudaErrors(cudaDeviceSynchronize());
+    auto t1 = std::chrono::high_resolution_clock::now();
+    for (int iter = 0; iter < 200; ++iter)
+    {
+        // Train
+        int imageid = iter % (train_size / context.m_batchSize);
+
+        // Prepare current batch on device
+        checkCudaErrors(cudaMemcpyAsync(d_data, &dataset[imageid * context.m_batchSize],
+                                        sizeof(float) * context.m_batchSize*25 , cudaMemcpyHostToDevice));
+        checkCudaErrors(cudaMemcpyAsync(d_labels, &saidas[imageid * context.m_batchSize],
+                                        sizeof(float) * context.m_batchSize, cudaMemcpyHostToDevice));
+        
+        // Forward propagation
+        context.ForwardPropagation(d_data, d_fc1, d_fc1relu, 
+				   d_fc2, d_fc2relu, d_fc3, d_fc3smax,
+                                   d_pfc1, d_pfc1bias, 
+				   d_pfc2, d_pfc2bias, 
+				   d_pfc3, d_pfc3bias, d_onevec);
+
+        // Backward propagation
+        context.Backpropagation( d_data, d_labels, d_fc1, d_fc1relu, 
+				d_fc2, d_fc2relu, d_fc3, d_fc3smax, d_dlossdata,
+                                d_pfc1, d_pfc1bias, 
+				d_pfc2, d_pfc2bias,
+				d_pfc3, d_pfc3bias,
+                                d_gfc1, d_gfc1bias, d_dfc1, d_dfc1relu,
+				d_gfc2, d_gfc2bias, d_dfc2, d_dfc2relu, 
+				d_gfc3, d_gfc3bias, d_dfc3,
+				d_onevec);
+
+        // Compute learning rate
+        float learningRate = static_cast<float>(1 * pow((1.0 + FLAGS_lr_gamma * iter), (-FLAGS_lr_power)));
+
+        // Update weights
+        context.UpdateWeights(learningRate,
+                              d_pfc1, d_pfc1bias, 
+			      d_pfc2, d_pfc2bias,
+			      d_pfc3, d_pfc3bias,
+                              d_gfc1, d_gfc1bias,
+			      d_gfc2, d_gfc2bias,
+			      d_gfc3, d_gfc3bias);
+    }
+    checkCudaErrors(cudaDeviceSynchronize());
+    auto t2 = std::chrono::high_resolution_clock::now();
+
+    printf("Iteration time: %f ms\n", std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0f / FLAGS_iterations);
+
+
 
 }
