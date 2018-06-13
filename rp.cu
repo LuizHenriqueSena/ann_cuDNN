@@ -97,6 +97,12 @@ __global__ void FillOnes(float *vec, int size)
     vec[idx] = 1.0f;
 }
 
+void imprimeSaidas(float *data, int tamanho){
+	int i = 0;
+	for(i = 0; i <tamanho; i++) {
+		printf("Saida[%d] = %.6f \n", i, data[i]);
+	}
+}
 struct FullyConnectedLayer
 {
     int inputs, outputs;
@@ -259,6 +265,7 @@ struct TrainingContext
         // Softmax loss
         checkCUDNN(cudnnSoftmaxForward(cudnnHandle, CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_CHANNEL,
                                        &alpha, l3Tensor, fc3, &beta, l3Tensor, result));
+	
     }
 
     void Backpropagation(float *data, float *labels, float *fc1, float *fc1relu,
@@ -617,12 +624,14 @@ int main() {
         for (auto&& iter : l3.pbias)
             iter = static_cast<float>(0.5);
 
-	TrainingContext context(0, 50, l1, l2, l3);
+	TrainingContext context(0, 1, l1, l2, l3);
+
+
 
 float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3smax;
 
 	checkCudaErrors(cudaMalloc(&d_data,    sizeof(float) * context.m_batchSize * 25));
-	checkCudaErrors(cudaMalloc(&d_labels,  sizeof(float) * context.m_batchSize * 1                  * 1                                 * 1));
+	checkCudaErrors(cudaMalloc(&d_labels,  sizeof(float) * context.m_batchSize * 1));
 	checkCudaErrors(cudaMalloc(&d_fc1,     sizeof(float) * context.m_batchSize * l1.outputs));    
 	checkCudaErrors(cudaMalloc(&d_fc1relu, sizeof(float) * context.m_batchSize * l1.outputs));
 	checkCudaErrors(cudaMalloc(&d_fc2,     sizeof(float) * context.m_batchSize * l2.outputs));
@@ -710,7 +719,8 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
 				d_onevec);
 
         // Compute learning rate
-        float learningRate = static_cast<float>(1 * pow((1.0 + FLAGS_lr_gamma * iter), (-FLAGS_lr_power)));
+	float learningRate = 0.5;
+        //float learningRate = static_cast<float>(1 * pow((1.0 + FLAGS_lr_gamma * iter), (-FLAGS_lr_power)));
 
         // Update weights
         context.UpdateWeights(learningRate,
@@ -721,10 +731,28 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
 			      d_gfc2, d_gfc2bias,
 			      d_gfc3, d_gfc3bias);
     }
+	
+	std::vector<float> entradaTeste(25);
+	entradaTeste = {0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
+	std::vector<float> saidaAtual(l3.outputs);
+	float *d_saidaAtual;
+
+	checkCudaErrors(cudaMalloc(&d_saidaAtual, sizeof(float) * context.m_batchSize * l3.outputs)); 
+	        checkCudaErrors(cudaMemcpyAsync(d_data, &entradaTeste[0],
+                                        sizeof(float) * context.m_batchSize*25 , cudaMemcpyHostToDevice));
+	        context.ForwardPropagation(d_data, d_fc1, d_fc1relu, 
+				   d_fc2, d_fc2relu, d_fc3, d_saidaAtual,
+                                   d_pfc1, d_pfc1bias, 
+				   d_pfc2, d_pfc2bias, 
+				   d_pfc3, d_pfc3bias, d_onevec);
+
+	checkCudaErrors(cudaMemcpy(&saidaAtual[0], d_saidaAtual, sizeof(float) * l3.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&saidaAtual[0], 5);
+	
     checkCudaErrors(cudaDeviceSynchronize());
     auto t2 = std::chrono::high_resolution_clock::now();
 
-    printf("Iteration time: %f ms\n", std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0f / FLAGS_iterations);
+    //printf("Iteration time: %f ms\n", std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0f / FLAGS_iterations);
 
 
 
