@@ -147,7 +147,7 @@ struct TrainingContext
 
         checkCUDNN(cudnnCreateActivationDescriptor(&l1Activation));
         checkCUDNN(cudnnCreateActivationDescriptor(&l2Activation));
-        //checkCUDNN(cudnnCreateActivationDescriptor(&l3Activation));
+        checkCUDNN(cudnnCreateActivationDescriptor(&l3Activation));
 
         
         // Set tensor descriptor sizes
@@ -172,6 +172,10 @@ struct TrainingContext
 
 	checkCUDNN(cudnnSetActivationDescriptor(l2Activation, CUDNN_ACTIVATION_SIGMOID,
                                                 CUDNN_PROPAGATE_NAN, 0.0));
+
+	checkCUDNN(cudnnSetActivationDescriptor(l3Activation, CUDNN_ACTIVATION_SIGMOID,
+                                                CUDNN_PROPAGATE_NAN, 0.0));
+
     }
 
     ~TrainingContext()
@@ -263,9 +267,10 @@ struct TrainingContext
 
 
         // Softmax loss
-        checkCUDNN(cudnnSoftmaxForward(cudnnHandle, CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_CHANNEL,
-                                       &alpha, l3Tensor, fc3, &beta, l3Tensor, result));
-	
+        //checkCUDNN(cudnnSoftmaxForward(cudnnHandle, CUDNN_SOFTMAX_ACCURATE, CUDNN_SOFTMAX_MODE_CHANNEL,
+        //                               &alpha, l3Tensor, fc3, &beta, l3Tensor, result));
+	checkCUDNN(cudnnActivationForward(cudnnHandle, l3Activation, &alpha,
+                                          l3Tensor, fc3, &beta, l3Tensor, result));
     }
 
     void Backpropagation(float *data, float *labels, float *fc1, float *fc1relu,
@@ -287,11 +292,13 @@ struct TrainingContext
         // Initialization (using the training error function)
         checkCudaErrors(cudaMemcpyAsync(dloss_data, fc3sfmx, sizeof(float) * m_batchSize * ref_l3.outputs, cudaMemcpyDeviceToDevice));
         
-        // Softmax layer
-        SoftmaxLossBackprop<<<RoundUp(m_batchSize, BW), BW>>>(labels, ref_l3.outputs, m_batchSize, dloss_data);
-
         // Accounting for batch size in SGD
-        checkCudaErrors(cublasSscal(cublasHandle, ref_l3.outputs * m_batchSize, &scalVal, dloss_data, 1));
+        //checkCudaErrors(cublasSscal(cublasHandle, ref_l3.outputs * m_batchSize, &scalVal, dloss_data, 1));
+
+	 // ReLU activation
+        checkCUDNN(cudnnActivationBackward(cudnnHandle, l3Activation, &alpha,
+                                           l3Tensor, fc3sfmx, l3Tensor, labels,
+                                           l3Tensor, fc3, &beta, l3Tensor, dloss_data));
 
         // FC3 layer
         // Compute derivative with respect to weights: gfc3 = (fc2relu * dfc3smax')
@@ -896,9 +903,9 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
         int imageid = iter % (train_size / context.m_batchSize);
 
         // Prepare current batch on device
-        checkCudaErrors(cudaMemcpyAsync(d_data, &dataset[imageid * context.m_batchSize],
+        checkCudaErrors(cudaMemcpyAsync(d_data, &dataset[imageid * context.m_batchSize*25],
                                         sizeof(float) * context.m_batchSize*25 , cudaMemcpyHostToDevice));
-        checkCudaErrors(cudaMemcpyAsync(d_labels, &saidas[imageid * context.m_batchSize],
+        checkCudaErrors(cudaMemcpyAsync(d_labels, &saidas[imageid * context.m_batchSize*5],
                                         sizeof(float) * context.m_batchSize*5, cudaMemcpyHostToDevice));
         
         // Forward propagation
@@ -916,7 +923,7 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
 				d_pfc3, d_pfc3bias,
                                 d_gfc1, d_gfc1bias, d_dfc1, d_dfc1relu,
 				d_gfc2, d_gfc2bias, d_dfc2, d_dfc2relu, 
-				d_gfc3, d_gfc3bias, d_dfc3,
+				d_gfc3, d_gfc3bias, d_dfc3, 
 				d_onevec);
 
         // Compute learning rate
