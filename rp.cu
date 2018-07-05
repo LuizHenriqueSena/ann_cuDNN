@@ -55,6 +55,7 @@
 
 /**
  * Computes ceil(x / y) for integral nonnegative values.
+ *teste
  */
 static inline unsigned int RoundUp(unsigned int nominator, unsigned int denominator)
 {
