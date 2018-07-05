@@ -62,22 +62,23 @@ static inline unsigned int RoundUp(unsigned int nominator, unsigned int denomina
     return (nominator + denominator - 1) / denominator;
 }
 
-float funcaoDeAtivacao(float u) {
-	float retorno;
-	retorno = (1/(1 + pow(2.718281,(u*(-1)))));
-	return retorno;
+__device__ void funcaoDeAtivacao(float * u, float * retorno) {
+	printf("VALOR DO RETORNO: %.6f \n", *retorno);
+	*retorno = (float)(1/(1 + powf(2.718281,((*u)*(-1)))));
+	
 }
 
-float derivadaFuncaoDeAtivacao(float u) {
-	float retorno;
-	retorno = funcaoDeAtivacao(u)*(1 - funcaoDeAtivacao(u));
-	return retorno;
+__device__ void derivadaFuncaoDeAtivacao(float * u, float * retorno) {
+	funcaoDeAtivacao(u, retorno);
+	*retorno = (*retorno)*(1 - (*retorno));
+	printf("VALOR DO RETORNO: %.6f \n", *retorno);
 }
 
-__global__ void SigmoidBackprop(float * label, float * outputLayer, float * lastInputLayer, int size, float* gradienteFc3) {
+__global__ void SigmoidBackprop(float * label, float * outputLayer, float * lastInputLayer, int size, float* gradienteFc3, float * derivada) {
 			int contador = 0;
 			for( contador = 0; contador <= size; contador++){
-			gradienteFc3[contador] = (label[contador] - outputLayer[contador]) * derivadaFuncaoDeAtivacao(lastInputLayer);
+			derivadaFuncaoDeAtivacao(&lastInputLayer[contador],derivada);
+			gradienteFc3[contador] = (label[contador] - outputLayer[contador]) * (*aux);
 			}
 }
 
@@ -301,7 +302,7 @@ struct TrainingContext
                          float *gfc1, float *gfc1bias, float *dfc1, float *dfc1relu,
                          float *gfc2, float *gfc2bias, float *dfc2, float *dfc2relu,
 			 float *gfc3, float *gfc3bias, float *dfc3,
-                         float *onevec)
+                         float *onevec, float *derivada)
     {
         float alpha = 1.0f, beta = 0.0f;
 
@@ -316,6 +317,8 @@ struct TrainingContext
         //checkCudaErrors(cublasSscal(cublasHandle, ref_l3.outputs * m_batchSize, &scalVal, dloss_data, 1));
 
 	 // ReLU activation
+
+	SigmoidBackprop<<<1,1>>>(labels, dloss_data, fc3, ref_l3.outputs, float* gradienteFc3, derivada) {
         checkCUDNN(cudnnActivationBackward(cudnnHandle, l3Activation, &alpha,
                                            l3Tensor, fc3sfmx, l3Tensor, labels,
                                            l3Tensor, fc3, &beta, l3Tensor, dloss_data));
@@ -888,7 +891,7 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
     checkCudaErrors(cudaMalloc(&d_gfc3bias,   sizeof(float) * l3.pbias.size()));
 
     // Differentials w.r.t. data
-    float *d_dfc1, *d_dfc1relu, *d_dfc2, *d_dfc2relu, *d_dfc3, *d_dfc3sfmax, *d_dlossdata;
+    float *d_dfc1, *d_dfc1relu, *d_dfc2, *d_dfc2relu, *d_dfc3, *d_dfc3sfmax, *d_dlossdata, *derivada;
 
     checkCudaErrors(cudaMalloc(&d_dfc1,     sizeof(float) * context.m_batchSize * l1.inputs));
     checkCudaErrors(cudaMalloc(&d_dfc1relu, sizeof(float) * context.m_batchSize * l1.outputs));
@@ -897,7 +900,7 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
     checkCudaErrors(cudaMalloc(&d_dfc3,     sizeof(float) * context.m_batchSize * l3.inputs));
     checkCudaErrors(cudaMalloc(&d_dfc3sfmax, sizeof(float) * context.m_batchSize * l3.outputs));
     checkCudaErrors(cudaMalloc(&d_dlossdata,sizeof(float) * context.m_batchSize * l3.outputs));
-
+     checkCudaErrors(cudaMalloc(&derivada,sizeof(float) ));
 
     float *d_onevec;
     checkCudaErrors(cudaMalloc(&d_onevec, sizeof(float)* context.m_batchSize));
@@ -944,7 +947,7 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
                                 d_gfc1, d_gfc1bias, d_dfc1, d_dfc1relu,
 				d_gfc2, d_gfc2bias, d_dfc2, d_dfc2relu,
 				d_gfc3, d_gfc3bias, d_dfc3,
-				d_onevec);
+				d_onevec, derivada);
 
         // Compute learning rate
 	float learningRate = 0.5;
@@ -980,8 +983,21 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
     checkCudaErrors(cudaDeviceSynchronize());
     auto t2 = std::chrono::high_resolution_clock::now();
 
-    //printf("Iteration time: %f ms\n", std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0f / FLAGS_iterations);
+//printf("Iteration time: %f ms\n", std::chrono::duration_cast<std::chrono::microseconds>(t2 - t1).count() / 1000.0f / FLAGS_iterations);
 
+//	float u;
+//	float retorno;
+//	float *du;
+//	float *dretorno;
+//	  checkCudaErrors(cudaMalloc(&du,     sizeof(float) ));
+//	checkCudaErrors(cudaMalloc(&dretorno,     sizeof(float) ));
+//	u = 1.0;
+//	retorno = 5.0;
+//	 checkCudaErrors(cudaMemcpyAsync(du, &u,      sizeof(float), cudaMemcpyHostToDevice));
+//	 checkCudaErrors(cudaMemcpyAsync(dretorno, &retorno,      sizeof(float) , cudaMemcpyHostToDevice));
 
+//	derivadaFuncaoDeAtivacao<<<1,1>>>(du, dretorno);
+
+	
 
 }
