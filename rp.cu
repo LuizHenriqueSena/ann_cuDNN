@@ -74,9 +74,11 @@ float derivadaFuncaoDeAtivacao(float u) {
 	return retorno;
 }
 
-__global__ void SigmoidBackprop(float * label, float * outputLayer, float * lastInputLayer, int size, ) {
-
-
+__global__ void SigmoidBackprop(float * label, float * outputLayer, float * lastInputLayer, int size, float* gradienteFc3) {
+			int contador = 0;
+			for( contador = 0; contador <= size; contador++){
+			gradienteFc3[contador] = (label[contador] - outputLayer[contador]) * derivadaFuncaoDeAtivacao(lastInputLayer);
+			}
 }
 
 /**
