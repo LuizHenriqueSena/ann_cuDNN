@@ -75,8 +75,8 @@ float derivadaFuncaoDeAtivacao(float u) {
 }
 
 __global__ void SigmoidBackprop(float * label, float * outputLayer, float * lastInputLayer, int size, ) {
-	
-	
+
+
 }
 
 /**
@@ -167,7 +167,7 @@ struct TrainingContext
         checkCUDNN(cudnnCreateActivationDescriptor(&l2Activation));
         checkCUDNN(cudnnCreateActivationDescriptor(&l3Activation));
 
-        
+
         // Set tensor descriptor sizes
 
         checkCUDNN(cudnnSetTensor4dDescriptor(l1Tensor,
@@ -205,7 +205,7 @@ struct TrainingContext
         checkCUDNN(cudnnDestroyTensorDescriptor(dataTensor));
         checkCUDNN(cudnnDestroyTensorDescriptor(l1Tensor));
         checkCUDNN(cudnnDestroyTensorDescriptor(l2Tensor));
-	checkCUDNN(cudnnDestroyTensorDescriptor(l3Tensor));
+	      checkCUDNN(cudnnDestroyTensorDescriptor(l3Tensor));
         checkCUDNN(cudnnDestroyActivationDescriptor(l1Activation));
         checkCUDNN(cudnnDestroyActivationDescriptor(l2Activation));
     }
@@ -216,7 +216,7 @@ struct TrainingContext
                             float *pfc1, float *pfc1bias,
                             float *pfc2, float *pfc2bias,
                             float *pfc3, float *pfc3bias, float *onevec)
-    {        
+    {
         float alpha = 1.0f, beta = 0.0f;
         checkCudaErrors(cudaSetDevice(m_gpuid));
 
@@ -300,7 +300,7 @@ struct TrainingContext
                          float *gfc2, float *gfc2bias, float *dfc2, float *dfc2relu,
 			 float *gfc3, float *gfc3bias, float *dfc3,
                          float *onevec)
-    {    
+    {
         float alpha = 1.0f, beta = 0.0f;
 
         float scalVal = 1.0f / static_cast<float>(m_batchSize);
@@ -309,7 +309,7 @@ struct TrainingContext
 
         // Initialization (using the training error function)
         checkCudaErrors(cudaMemcpyAsync(dloss_data, fc3sfmx, sizeof(float) * m_batchSize * ref_l3.outputs, cudaMemcpyDeviceToDevice));
-        
+
         // Accounting for batch size in SGD
         //checkCudaErrors(cublasSscal(cublasHandle, ref_l3.outputs * m_batchSize, &scalVal, dloss_data, 1));
 
@@ -328,7 +328,7 @@ struct TrainingContext
         // Compute derivative with respect to data (for previous layer): pfc3*dfc3smax (500x10*10xN)
         checkCudaErrors(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ref_l3.inputs, m_batchSize, ref_l3.outputs,
                                     &alpha, pfc3, ref_l3.inputs, dloss_data, ref_l3.outputs, &beta, dfc3, ref_l3.inputs));
-        
+
         // ReLU activation
         checkCUDNN(cudnnActivationBackward(cudnnHandle, l2Activation, &alpha,
                                            l2Tensor, fc2relu, l2Tensor, dfc3,
@@ -373,7 +373,7 @@ struct TrainingContext
                        float *gfc1, float *gfc1bias,
                        float *gfc2, float *gfc2bias,
 			float *gfc3, float *gfc3bias)
-    {    
+    {
         float alpha = -learning_rate;
 
         checkCudaErrors(cudaSetDevice(m_gpuid));
@@ -824,7 +824,7 @@ int main() {
 	FullyConnectedLayer l1(25, 5), l2(5,6), l3(6,5);
 
 	std::random_device rd;
-	
+
 	float wfc1 = sqrt(3.0f / (l1.inputs * l1.outputs));
 	printf("valor do aleatorio %.6f \n", wfc1);
         std::uniform_real_distribution<> dfc1(-wfc1, wfc1);
@@ -836,7 +836,7 @@ int main() {
 	float wfc3 = sqrt(3.0f / (l3.inputs * l3.outputs));
 	printf("valor do aleatorio %.6f \n", wfc3);
         std::uniform_real_distribution<> dfc3(-wfc3, wfc3);
-	
+
         for (auto&& iter : l1.pneurons)
             iter = static_cast<float>(0.5);
         for (auto&& iter : l1.pbias)
@@ -858,33 +858,33 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
 
 	checkCudaErrors(cudaMalloc(&d_data,    sizeof(float) * context.m_batchSize * 25));
 	checkCudaErrors(cudaMalloc(&d_labels,  sizeof(float) * context.m_batchSize * 5));
-	checkCudaErrors(cudaMalloc(&d_fc1,     sizeof(float) * context.m_batchSize * l1.outputs));    
+	checkCudaErrors(cudaMalloc(&d_fc1,     sizeof(float) * context.m_batchSize * l1.outputs));
 	checkCudaErrors(cudaMalloc(&d_fc1relu, sizeof(float) * context.m_batchSize * l1.outputs));
 	checkCudaErrors(cudaMalloc(&d_fc2,     sizeof(float) * context.m_batchSize * l2.outputs));
 	checkCudaErrors(cudaMalloc(&d_fc2relu, sizeof(float) * context.m_batchSize * l2.outputs));
 	checkCudaErrors(cudaMalloc(&d_fc3,     sizeof(float) * context.m_batchSize * l3.outputs));
-	checkCudaErrors(cudaMalloc(&d_fc3smax, sizeof(float) * context.m_batchSize * l3.outputs));   
-	
+	checkCudaErrors(cudaMalloc(&d_fc3smax, sizeof(float) * context.m_batchSize * l3.outputs));
+
     // Network parameters
     float *d_pfc1, *d_pfc1bias, *d_pfc2, *d_pfc2bias, *d_pfc3, *d_pfc3bias;
-		
+
     checkCudaErrors(cudaMalloc(&d_pfc1,       sizeof(float) * l1.pneurons.size()));
     checkCudaErrors(cudaMalloc(&d_pfc1bias,   sizeof(float) * l1.pbias.size()));
     checkCudaErrors(cudaMalloc(&d_pfc2,       sizeof(float) * l2.pneurons.size()));
-    checkCudaErrors(cudaMalloc(&d_pfc2bias,   sizeof(float) * l2.pbias.size())); 
+    checkCudaErrors(cudaMalloc(&d_pfc2bias,   sizeof(float) * l2.pbias.size()));
     checkCudaErrors(cudaMalloc(&d_pfc3,       sizeof(float) * l3.pneurons.size()));
-    checkCudaErrors(cudaMalloc(&d_pfc3bias,   sizeof(float) * l3.pbias.size()));  
+    checkCudaErrors(cudaMalloc(&d_pfc3bias,   sizeof(float) * l3.pbias.size()));
 
     // Network parameter gradients
     float *d_gfc1, *d_gfc1bias, *d_gfc2, *d_gfc2bias, *d_gfc3, *d_gfc3bias;
-    
+
     checkCudaErrors(cudaMalloc(&d_gfc1,       sizeof(float) * l1.pneurons.size()));
-    checkCudaErrors(cudaMalloc(&d_gfc1bias,   sizeof(float) * l1.pbias.size()));    
+    checkCudaErrors(cudaMalloc(&d_gfc1bias,   sizeof(float) * l1.pbias.size()));
     checkCudaErrors(cudaMalloc(&d_gfc2,       sizeof(float) * l2.pneurons.size()));
     checkCudaErrors(cudaMalloc(&d_gfc2bias,   sizeof(float) * l2.pbias.size()));
     checkCudaErrors(cudaMalloc(&d_gfc3,       sizeof(float) * l3.pneurons.size()));
     checkCudaErrors(cudaMalloc(&d_gfc3bias,   sizeof(float) * l3.pbias.size()));
-    
+
     // Differentials w.r.t. data
     float *d_dfc1, *d_dfc1relu, *d_dfc2, *d_dfc2relu, *d_dfc3, *d_dfc3sfmax, *d_dlossdata;
 
@@ -897,7 +897,7 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
     checkCudaErrors(cudaMalloc(&d_dlossdata,sizeof(float) * context.m_batchSize * l3.outputs));
 
 
-    float *d_onevec;   
+    float *d_onevec;
     checkCudaErrors(cudaMalloc(&d_onevec, sizeof(float)* context.m_batchSize));
 
 
@@ -908,7 +908,7 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
     checkCudaErrors(cudaMemcpyAsync(d_pfc2bias, &l2.pbias[0],     sizeof(float) * l2.pbias.size(),    cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpyAsync(d_pfc3, &l3.pneurons[0],      sizeof(float) * l3.pneurons.size(), cudaMemcpyHostToDevice));
     checkCudaErrors(cudaMemcpyAsync(d_pfc3bias, &l3.pbias[0],     sizeof(float) * l3.pbias.size(),    cudaMemcpyHostToDevice));
-    
+
     // Fill one-vector with ones
     FillOnes<<<RoundUp(context.m_batchSize, BW), BW>>>(d_onevec, context.m_batchSize);
 
@@ -925,23 +925,23 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
                                         sizeof(float) * context.m_batchSize*25 , cudaMemcpyHostToDevice));
         checkCudaErrors(cudaMemcpyAsync(d_labels, &saidas[imageid * context.m_batchSize*5],
                                         sizeof(float) * context.m_batchSize*5, cudaMemcpyHostToDevice));
-        
+
         // Forward propagation
-        context.ForwardPropagation(d_data, d_fc1, d_fc1relu, 
+        context.ForwardPropagation(d_data, d_fc1, d_fc1relu,
 				   d_fc2, d_fc2relu, d_fc3, d_fc3smax,
-                                   d_pfc1, d_pfc1bias, 
-				   d_pfc2, d_pfc2bias, 
+                                   d_pfc1, d_pfc1bias,
+				   d_pfc2, d_pfc2bias,
 				   d_pfc3, d_pfc3bias, d_onevec);
 
         // Backward propagation
-        context.Backpropagation( d_data, d_labels, d_fc1, d_fc1relu, 
+        context.Backpropagation( d_data, d_labels, d_fc1, d_fc1relu,
 				d_fc2, d_fc2relu, d_fc3, d_fc3smax, d_dlossdata,
-                                d_pfc1, d_pfc1bias, 
+                                d_pfc1, d_pfc1bias,
 				d_pfc2, d_pfc2bias,
 				d_pfc3, d_pfc3bias,
                                 d_gfc1, d_gfc1bias, d_dfc1, d_dfc1relu,
-				d_gfc2, d_gfc2bias, d_dfc2, d_dfc2relu, 
-				d_gfc3, d_gfc3bias, d_dfc3, 
+				d_gfc2, d_gfc2bias, d_dfc2, d_dfc2relu,
+				d_gfc3, d_gfc3bias, d_dfc3,
 				d_onevec);
 
         // Compute learning rate
@@ -950,31 +950,31 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
 
         // Update weights
         context.UpdateWeights(learningRate,
-                              d_pfc1, d_pfc1bias, 
+                              d_pfc1, d_pfc1bias,
 			      d_pfc2, d_pfc2bias,
 			      d_pfc3, d_pfc3bias,
                               d_gfc1, d_gfc1bias,
 			      d_gfc2, d_gfc2bias,
 			      d_gfc3, d_gfc3bias);
     }
-	
+
 	std::vector<float> entradaTeste(25);
 	entradaTeste = {1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1};
 	std::vector<float> saidaAtual(l3.outputs);
 	float *d_saidaAtual;
 
-	checkCudaErrors(cudaMalloc(&d_saidaAtual, sizeof(float) * context.m_batchSize * l3.outputs)); 
+	checkCudaErrors(cudaMalloc(&d_saidaAtual, sizeof(float) * context.m_batchSize * l3.outputs));
 	        checkCudaErrors(cudaMemcpyAsync(d_data, &entradaTeste[0],
                                         sizeof(float) * context.m_batchSize*25 , cudaMemcpyHostToDevice));
-	        context.ForwardPropagation(d_data, d_fc1, d_fc1relu, 
+	        context.ForwardPropagation(d_data, d_fc1, d_fc1relu,
 				   d_fc2, d_fc2relu, d_fc3, d_saidaAtual,
-                                   d_pfc1, d_pfc1bias, 
-				   d_pfc2, d_pfc2bias, 
+                                   d_pfc1, d_pfc1bias,
+				   d_pfc2, d_pfc2bias,
 				   d_pfc3, d_pfc3bias, d_onevec);
 
 	checkCudaErrors(cudaMemcpy(&saidaAtual[0], d_saidaAtual, sizeof(float) * l3.outputs, cudaMemcpyDeviceToHost));
 	imprimeSaidas(&saidaAtual[0], 5);
-	
+
     checkCudaErrors(cudaDeviceSynchronize());
     auto t2 = std::chrono::high_resolution_clock::now();
 
