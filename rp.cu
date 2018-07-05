@@ -62,6 +62,23 @@ static inline unsigned int RoundUp(unsigned int nominator, unsigned int denomina
     return (nominator + denominator - 1) / denominator;
 }
 
+float funcaoDeAtivacao(float u) {
+	float retorno;
+	retorno = (1/(1 + pow(2.718281,(u*(-1)))));
+	return retorno;
+}
+
+float derivadaFuncaoDeAtivacao(float u) {
+	float retorno;
+	retorno = funcaoDeAtivacao(u)*(1 - funcaoDeAtivacao(u));
+	return retorno;
+}
+
+__global__ void SigmoidBackprop(float * label, float * outputLayer, float * lastInputLayer, int size, ) {
+	
+	
+}
+
 /**
  * Computes the backpropagation results of the Softmax loss for each result in a batch.
  * Uses the softmax values obtained from forward propagation to compute the difference.
