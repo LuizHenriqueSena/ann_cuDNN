@@ -19,7 +19,7 @@
 #include <cublas_v2.h>
 #include <cudnn.h>
 
-//nvcc -o rp rp.cu -std=c++11 -lcudnn -lcublas
+//how to build: nvcc -o rp rp.cu -std=c++11 -lcudnn -lcublas
 // Block width for CUDA kernels
 #define BW 128
 
