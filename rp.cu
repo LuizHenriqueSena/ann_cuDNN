@@ -62,23 +62,22 @@ static inline unsigned int RoundUp(unsigned int nominator, unsigned int denomina
     return (nominator + denominator - 1) / denominator;
 }
 
-__device__ void funcaoDeAtivacao(float * u, float * retorno) {
-	printf("VALOR DO RETORNO: %.6f \n", *retorno);
-	*retorno = (float)(1/(1 + powf(2.718281,((*u)*(-1)))));
-	
-}
+//__device__ void funcaoDeAtivacao(float * u, float * retorno) {
+//	printf("VALOR DO RETORNO: %.6f \n", *retorno);
+//	*retorno = (float)(1/(1 + powf(2.718281,((*u)*(-1)))));
+//	
+//}
 
-__device__ void derivadaFuncaoDeAtivacao(float * u, float * retorno) {
-	funcaoDeAtivacao(u, retorno);
-	*retorno = (*retorno)*(1 - (*retorno));
-	printf("VALOR DO RETORNO: %.6f \n", *retorno);
-}
+//__device__ void derivadaFuncaoDeAtivacao(float * u, float * retorno) {
+//	funcaoDeAtivacao(u, retorno);
+//	*retorno = (*retorno)*(1 - (*retorno));
+//	printf("VALOR DO RETORNO: %.6f \n", *retorno);
+//}
 
-__global__ void SigmoidBackprop(float * label, float * outputLayer, float * lastInputLayer, int size, float* gradienteFc3, float * derivada) {
+__global__ void SigmoidBackprop(float * label, float * outputLayer, int size) {
 			int contador = 0;
-			for( contador = 0; contador <= size; contador++){
-			derivadaFuncaoDeAtivacao(&lastInputLayer[contador],derivada);
-			gradienteFc3[contador] = (label[contador] - outputLayer[contador]) * (*aux);
+			for( contador = 0; contador < size; contador++){
+			outputLayer[contador] = outputLayer[contador] - label[contador];
 			}
 }
 
@@ -318,10 +317,8 @@ struct TrainingContext
 
 	 // ReLU activation
 
-	SigmoidBackprop<<<1,1>>>(labels, dloss_data, fc3, ref_l3.outputs, float* gradienteFc3, derivada) {
-        checkCUDNN(cudnnActivationBackward(cudnnHandle, l3Activation, &alpha,
-                                           l3Tensor, fc3sfmx, l3Tensor, labels,
-                                           l3Tensor, fc3, &beta, l3Tensor, dloss_data));
+	SigmoidBackprop<<<1,1>>>(labels, dloss_data, ref_l3.outputs);
+
 
         // FC3 layer
         // Compute derivative with respect to weights: gfc3 = (fc2relu * dfc3smax')
@@ -916,7 +913,7 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
 
     // Fill one-vector with ones
     FillOnes<<<RoundUp(context.m_batchSize, BW), BW>>>(d_onevec, context.m_batchSize);
-
+	float *saidaAtual;
 
  checkCudaErrors(cudaDeviceSynchronize());
     auto t1 = std::chrono::high_resolution_clock::now();
@@ -937,6 +934,9 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
                                    d_pfc1, d_pfc1bias,
 				   d_pfc2, d_pfc2bias,
 				   d_pfc3, d_pfc3bias, d_onevec);
+	
+	checkCudaErrors(cudaMemcpy(&saidaAtual[0], d_fc3smax, sizeof(float) * l3.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&saidaAtual[0], 5);
 
         // Backward propagation
         context.Backpropagation( d_data, d_labels, d_fc1, d_fc1relu,
@@ -965,7 +965,6 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
 
 	std::vector<float> entradaTeste(25);
 	entradaTeste = {1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1};
-	std::vector<float> saidaAtual(l3.outputs);
 	float *d_saidaAtual;
 
 	checkCudaErrors(cudaMalloc(&d_saidaAtual, sizeof(float) * context.m_batchSize * l3.outputs));
