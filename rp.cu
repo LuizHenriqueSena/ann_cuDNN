@@ -14,6 +14,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include <unistd.h>
 
 #include <cuda_runtime.h>
 #include <cublas_v2.h>
@@ -77,7 +78,9 @@ static inline unsigned int RoundUp(unsigned int nominator, unsigned int denomina
 __global__ void SigmoidBackprop(float * label, float * outputLayer, int size) {
 			int contador = 0;
 			for( contador = 0; contador < size; contador++){
+			printf("OutputLayer[%d] = %.6f , label[%d] = %.6f \n", contador, outputLayer[contador], contador, label[contador]);
 			outputLayer[contador] = outputLayer[contador] - label[contador];
+			printf("OutputLayer[%d] = %.6f  \n", contador, outputLayer[contador]);
 			}
 }
 
@@ -221,6 +224,9 @@ struct TrainingContext
     {
         float alpha = 1.0f, beta = 0.0f;
         checkCudaErrors(cudaSetDevice(m_gpuid));
+	std::vector<float> fc1debug(ref_l1.outputs);
+	std::vector<float> fc2debug(ref_l2.outputs);
+	std::vector<float> fc3debug(ref_l3.outputs);
 
 
         // FC1 layer
@@ -232,6 +238,10 @@ struct TrainingContext
                                     data, ref_l1.inputs,
                                     &beta,
                                     fc1, ref_l1.outputs));
+
+	checkCudaErrors(cudaMemcpy(&fc1debug[0], fc1, sizeof(float) * ref_l1.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], ref_l1.outputs);
+	
         // Add bias using GEMM's "beta" (fc1 += pfc1bias*1_vec')
         checkCudaErrors(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
                                     ref_l1.outputs, m_batchSize, 1,
@@ -240,10 +250,17 @@ struct TrainingContext
                                     onevec, 1,
                                     &alpha,
                                     fc1, ref_l1.outputs));
+	printf("-----------FC1 WITH BIAS CALCULATOR-------------\n");
+		checkCudaErrors(cudaMemcpy(&fc1debug[0], fc1, sizeof(float) * ref_l1.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], ref_l1.outputs);
 
         // ReLU activation
         checkCUDNN(cudnnActivationForward(cudnnHandle, l1Activation, &alpha,
                                           l1Tensor, fc1, &beta, l1Tensor, fc1relu));
+
+	printf("-----------FC1 ACTIVATION-------------\n");
+		checkCudaErrors(cudaMemcpy(&fc1debug[0], fc1relu, sizeof(float) * ref_l1.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], ref_l1.outputs);
 
         // FC2 layer
         // Forward propagate neurons using weights (fc2 = pfc2'*fc1relu)
@@ -254,6 +271,11 @@ struct TrainingContext
                                     fc1relu, ref_l2.inputs,
                                     &beta,
                                     fc2, ref_l2.outputs));
+
+	checkCudaErrors(cudaMemcpy(&fc2debug[0], fc2, sizeof(float) * ref_l2.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc2debug[0], ref_l2.outputs);
+
+	
         // Add bias using GEMM's "beta" (fc2 += pfc2bias*1_vec')
         checkCudaErrors(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
                                     ref_l2.outputs, m_batchSize, 1,
@@ -263,9 +285,18 @@ struct TrainingContext
                                     &alpha,
                                     fc2, ref_l2.outputs));
 
+	printf("-----------FC2 WITH BIAS CALCULATOR-------------\n");
+	checkCudaErrors(cudaMemcpy(&fc2debug[0], fc2, sizeof(float) * ref_l2.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc2debug[0], ref_l2.outputs);
+
+
         // ReLU activation
         checkCUDNN(cudnnActivationForward(cudnnHandle, l2Activation, &alpha,
                                           l2Tensor, fc2, &beta, l2Tensor, fc2relu));
+	
+	printf("-----------FC2 ACTIVATION-------------\n");
+	checkCudaErrors(cudaMemcpy(&fc2debug[0], fc2relu, sizeof(float) * ref_l2.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc2debug[0], ref_l2.outputs);
 
         // Forward propagate neurons using weights (fc3 = pfc3'*fc2relu)
         checkCudaErrors(cublasSgemm(cublasHandle, CUBLAS_OP_T, CUBLAS_OP_N,
@@ -275,6 +306,9 @@ struct TrainingContext
                                     fc2relu, ref_l3.inputs,
                                     &beta,
                                     fc3, ref_l2.outputs));
+
+	checkCudaErrors(cudaMemcpy(&fc3debug[0], fc3, sizeof(float) * ref_l3.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc3debug[0], ref_l3.outputs);
         // Add bias using GEMM's "beta" (fc3 += pfc3bias*1_vec')
         checkCudaErrors(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N,
                                     ref_l3.outputs, m_batchSize, 1,
@@ -283,6 +317,10 @@ struct TrainingContext
                                     onevec, 1,
                                     &alpha,
                                     fc3, ref_l3.outputs));
+	
+	printf("-----------FC3 WITH BIAS CALCULATOR-------------\n");
+	checkCudaErrors(cudaMemcpy(&fc3debug[0], fc3, sizeof(float) * ref_l3.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc3debug[0], ref_l3.outputs);
 
 
 
@@ -291,6 +329,10 @@ struct TrainingContext
         //                               &alpha, l3Tensor, fc3, &beta, l3Tensor, result));
 	checkCUDNN(cudnnActivationForward(cudnnHandle, l3Activation, &alpha,
                                           l3Tensor, fc3, &beta, l3Tensor, result));
+
+	printf("-----------FC3 ACTIVATION-------------\n");
+		checkCudaErrors(cudaMemcpy(&fc3debug[0], result, sizeof(float) * ref_l3.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc3debug[0], ref_l3.outputs);
     }
 
     void Backpropagation(float *data, float *labels, float *fc1, float *fc1relu,
@@ -307,6 +349,10 @@ struct TrainingContext
 
         float scalVal = 1.0f / static_cast<float>(m_batchSize);
 
+	std::vector<float> fc1debug(ref_l1.outputs);
+	std::vector<float> fc2debug(ref_l2.outputs);
+	std::vector<float> fc3debug(ref_l3.outputs);
+
         checkCudaErrors(cudaSetDevice(m_gpuid));
 
         // Initialization (using the training error function)
@@ -316,20 +362,41 @@ struct TrainingContext
         //checkCudaErrors(cublasSscal(cublasHandle, ref_l3.outputs * m_batchSize, &scalVal, dloss_data, 1));
 
 	 // ReLU activation
+	printf("-----------DESIRE AND OUTPUT COMPARISON fc3 BEFORE-------------\n");
+	checkCudaErrors(cudaMemcpy(&fc1debug[0], dloss_data, sizeof(float) * ref_l3.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], ref_l3.outputs);
 
 	SigmoidBackprop<<<1,1>>>(labels, dloss_data, ref_l3.outputs);
 
+	printf("-----------DESIRE AND OUTPUT COMPARISON fc3-------------\n");
+	checkCudaErrors(cudaMemcpy(&fc1debug[0], dloss_data, sizeof(float) * ref_l3.outputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], ref_l3.outputs);
 
         // FC3 layer
         // Compute derivative with respect to weights: gfc3 = (fc2relu * dfc3smax')
         checkCudaErrors(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_T, ref_l3.inputs, ref_l3.outputs, m_batchSize,
                                     &alpha, fc2relu, ref_l3.inputs, dloss_data, ref_l3.outputs, &beta, gfc3, ref_l3.inputs));
+
+	printf("-----------GRADIENTE fc3-------------\n");
+	checkCudaErrors(cudaMemcpy(&fc1debug[0], gfc3, sizeof(float) * ref_l3.inputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], ref_l3.inputs);
+
         // Compute derivative with respect to bias: gfc3bias = dfc3smax * 1_vec
         checkCudaErrors(cublasSgemv(cublasHandle, CUBLAS_OP_N, ref_l3.outputs, m_batchSize,
                                     &alpha, dloss_data, ref_l3.outputs, onevec, 1, &beta, gfc3bias, 1));
+
+	printf("-----------GRADIENTE fc3 BIAS-------------\n");
+	checkCudaErrors(cudaMemcpy(&fc1debug[0], gfc3bias, sizeof(float), cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], 1);
+
         // Compute derivative with respect to data (for previous layer): pfc3*dfc3smax (500x10*10xN)
         checkCudaErrors(cublasSgemm(cublasHandle, CUBLAS_OP_N, CUBLAS_OP_N, ref_l3.inputs, m_batchSize, ref_l3.outputs,
                                     &alpha, pfc3, ref_l3.inputs, dloss_data, ref_l3.outputs, &beta, dfc3, ref_l3.inputs));
+
+	printf("-----------GRADIENTE dfc3-------------\n");
+
+	checkCudaErrors(cudaMemcpy(&fc1debug[0], dfc3, sizeof(float) * ref_l3.inputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], ref_l3.inputs);
 
         // ReLU activation
         checkCUDNN(cudnnActivationBackward(cudnnHandle, l2Activation, &alpha,
@@ -410,6 +477,7 @@ int main() {
 	int num_gpus;
 	std::vector<float> dataset(tamanho_img*amostras);
 	dataset = {1,1,1,1,1,1,0,0,0,1,1,1,1,1,1,1,0,0,0,1,1,0,0,0,1,
+//1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1, //TESTE
 1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,1,0,0,0,0,1,1,1,1,1,
 1,1,1,1,1,0,0,1,0,0,0,0,1,0,0,0,0,1,0,0,1,1,1,1,1,
 1,1,1,1,1,1,0,0,0,1,1,0,0,0,1,1,0,0,0,1,1,1,1,1,1,
@@ -610,7 +678,7 @@ int main() {
 1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,1,1,1,0,0,
 0,0,0,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 
-	std::vector<uint8_t> saidas(amostras*5);
+	std::vector<float> saidas(amostras*5);
 	saidas = {1,0,0,0,0
 ,0,1,0,0,0
 ,0,0,1,0,0
@@ -859,7 +927,7 @@ int main() {
 float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3smax;
 
 	checkCudaErrors(cudaMalloc(&d_data,    sizeof(float) * context.m_batchSize * 25));
-	checkCudaErrors(cudaMalloc(&d_labels,  sizeof(float) * context.m_batchSize * 5));
+	checkCudaErrors(cudaMalloc(&d_labels,  sizeof(float) * context.m_batchSize * l3.outputs));
 	checkCudaErrors(cudaMalloc(&d_fc1,     sizeof(float) * context.m_batchSize * l1.outputs));
 	checkCudaErrors(cudaMalloc(&d_fc1relu, sizeof(float) * context.m_batchSize * l1.outputs));
 	checkCudaErrors(cudaMalloc(&d_fc2,     sizeof(float) * context.m_batchSize * l2.outputs));
@@ -913,14 +981,15 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
 
     // Fill one-vector with ones
     FillOnes<<<RoundUp(context.m_batchSize, BW), BW>>>(d_onevec, context.m_batchSize);
-	float *saidaAtual;
+	 std::vector<float> saidaAtual(5);
 
  checkCudaErrors(cudaDeviceSynchronize());
     auto t1 = std::chrono::high_resolution_clock::now();
-    for (int iter = 0; iter < 200; ++iter)
+    for (int iter = 0; iter < 1; ++iter)
     {
         // Train
         int imageid = iter % (train_size / context.m_batchSize);
+	printf("IMAGEID: %d", imageid);
 
         // Prepare current batch on device
         checkCudaErrors(cudaMemcpyAsync(d_data, &dataset[imageid * context.m_batchSize*25],
@@ -935,9 +1004,9 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
 				   d_pfc2, d_pfc2bias,
 				   d_pfc3, d_pfc3bias, d_onevec);
 	
-	checkCudaErrors(cudaMemcpy(&saidaAtual[0], d_fc3smax, sizeof(float) * l3.outputs, cudaMemcpyDeviceToHost));
-	imprimeSaidas(&saidaAtual[0], 5);
-
+	//checkCudaErrors(cudaMemcpy(&saidaAtual[0], d_fc3smax, sizeof(float) * 5, cudaMemcpyDeviceToHost));
+	//imprimeSaidas(&saidaAtual[0], 5);
+	//printf("VALOR DA SAIDA0 : %.6f \n", saidaAtual[0]); 
         // Backward propagation
         context.Backpropagation( d_data, d_labels, d_fc1, d_fc1relu,
 				d_fc2, d_fc2relu, d_fc3, d_fc3smax, d_dlossdata,
@@ -975,7 +1044,7 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
                                    d_pfc1, d_pfc1bias,
 				   d_pfc2, d_pfc2bias,
 				   d_pfc3, d_pfc3bias, d_onevec);
-
+	usleep(1000);
 	checkCudaErrors(cudaMemcpy(&saidaAtual[0], d_saidaAtual, sizeof(float) * l3.outputs, cudaMemcpyDeviceToHost));
 	imprimeSaidas(&saidaAtual[0], 5);
 
