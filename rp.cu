@@ -78,25 +78,25 @@ static inline unsigned int RoundUp(unsigned int nominator, unsigned int denomina
 //	printf("VALOR DO RETORNO: %.6f \n", *retorno);
 //}
 
-void parserEntradaParaVetor(char* entrada, float * amostras) {
+void parserEntradaParaVetor(char* entrada, float *saidaVetorizada) {
    char copia[100];
    char *token;
    strcpy(copia, entrada);
    int contx = 0;
    /* get the first token */
    token = strtok(copia, ";");
-   amostras[contx] = atof(token);
+   saidaVetorizada[contx] = atof(token);
    contx++;
    /* walk through other tokens */
    while( token != NULL ) {
       if(contx >= 25 - 1) {
         token = strtok(NULL, separadorFim);
-	amostras[contx] = atof(token);
+	saidaVetorizada[contx] = atof(token);
 	token = NULL;
       }
       else {
 	 token = strtok(NULL, separadorGenerico);
-         amostras[contx] = atof(token);
+         saidaVetorizada[contx] = atof(token);
          contx++;
       }
 
@@ -429,12 +429,29 @@ struct TrainingContext
 	printf("-----------GRADIENTE dfc3-------------\n");
 
 	checkCudaErrors(cudaMemcpy(&fc1debug[0], dfc3, sizeof(float) * ref_l3.inputs*ref_l3.outputs, cudaMemcpyDeviceToHost));
-	imprimeSaidas(&fc1debug[0], ref_l3.inputs*ref_l3.outputs);
+	imprimeSaidas(&fc1debug[0], ref_l3.inputs);
+
+
+		printf("-----------FC2 RELU-------------\n");
+
+	checkCudaErrors(cudaMemcpy(&fc1debug[0], fc2relu, sizeof(float) * ref_l3.inputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], ref_l3.inputs);
+
+	printf("-----------FC2 RESULT-------------\n");
+
+	checkCudaErrors(cudaMemcpy(&fc1debug[0], fc2, sizeof(float) * ref_l3.inputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], ref_l3.inputs);
+
 
         // ReLU activation
         checkCUDNN(cudnnActivationBackward(cudnnHandle, l2Activation, &alpha,
                                            l2Tensor, fc2relu, l2Tensor, dfc3,
                                            l2Tensor, fc2, &beta, l2Tensor, dfc2relu));
+
+	printf("-----------DFC2 RELU-------------\n");
+
+	checkCudaErrors(cudaMemcpy(&fc1debug[0], dfc2relu, sizeof(float) * ref_l3.inputs, cudaMemcpyDeviceToHost));
+	imprimeSaidas(&fc1debug[0], ref_l3.inputs);
 
         // FC2 layer
         // Compute derivative with respect to weights: gfc2 = (fc1relu * dfc2relu')
@@ -981,11 +998,11 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
     // Network parameter gradients
     float *d_gfc1, *d_gfc1bias, *d_gfc2, *d_gfc2bias, *d_gfc3, *d_gfc3bias;
 
-    checkCudaErrors(cudaMalloc(&d_gfc1,       sizeof(float) * l1.pneurons.size() * l1.pneurons.size()));
+    checkCudaErrors(cudaMalloc(&d_gfc1,       sizeof(float) * l1.pneurons.size()));
     checkCudaErrors(cudaMalloc(&d_gfc1bias,   sizeof(float) * l1.pbias.size()));
-    checkCudaErrors(cudaMalloc(&d_gfc2,       sizeof(float) * l2.pneurons.size() * l1.pneurons.size()));
+    checkCudaErrors(cudaMalloc(&d_gfc2,       sizeof(float) * l2.pneurons.size()));
     checkCudaErrors(cudaMalloc(&d_gfc2bias,   sizeof(float) * l2.pbias.size()));
-    checkCudaErrors(cudaMalloc(&d_gfc3,       sizeof(float) * l3.pneurons.size() *l2.pneurons.size()));
+    checkCudaErrors(cudaMalloc(&d_gfc3,       sizeof(float) * l3.pneurons.size()));
     checkCudaErrors(cudaMalloc(&d_gfc3bias,   sizeof(float) * l3.pbias.size()));
 
     // Differentials w.r.t. data
@@ -1018,7 +1035,7 @@ float *d_data, *d_labels, *d_fc1, *d_fc1relu, *d_fc2, *d_fc2relu, *d_fc3, *d_fc3
 
  checkCudaErrors(cudaDeviceSynchronize());
     auto t1 = std::chrono::high_resolution_clock::now();
-    for (int iter = 0; iter < 40000; ++iter)
+    for (int iter = 0; iter < 1; ++iter)
     {
         // Train
         int imageid = iter % (train_size / context.m_batchSize);
